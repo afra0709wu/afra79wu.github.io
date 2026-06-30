@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>互動式點名座位表 36人</title>
+<style>
+  :root{--bg:#f6f7fb;--card:#fff;--ink:#222;--muted:#666;--line:#ddd;--present:#b7f0c0;--absent:#ffb6b6;--late:#ffe08a;--leave:#b9dcff;--empty:#fff}
+  body{margin:0;font-family:"Microsoft JhengHei",system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+  .wrap{max-width:1100px;margin:24px auto;padding:0 16px}
+  h1{margin:0 0 12px;text-align:center;font-size:30px}
+  .teacher{background:#222;color:white;text-align:center;border-radius:14px;padding:14px;margin:14px auto 18px;max-width:420px;font-size:22px;font-weight:700;letter-spacing:6px}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:center;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:16px;box-shadow:0 2px 10px #0000000d}
+  input{border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:16px;min-width:150px}
+  button{border:0;border-radius:10px;padding:10px 14px;font-size:16px;font-weight:700;cursor:pointer;background:#222;color:#fff}
+  button.secondary{background:#666} button.danger{background:#b42318} button.excel{background:#147a3d}
+  .stats{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:10px 0 16px}
+  .pill{background:white;border:1px solid var(--line);border-radius:999px;padding:8px 12px;font-weight:700}
+  .legend{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-bottom:14px;color:var(--muted)}
+  .dot{display:inline-block;width:14px;height:14px;border-radius:4px;border:1px solid #aaa;vertical-align:-2px;margin-right:4px}
+  .grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;box-shadow:0 2px 10px #0000000d}
+  .seat{min-height:105px;border:2px solid #bbb;border-radius:16px;background:var(--empty);display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:8px;user-select:none;cursor:pointer;transition:.12s transform,.12s box-shadow,.12s background}
+  .seat:hover{transform:translateY(-2px);box-shadow:0 4px 14px #0000001a}.seat.present{background:var(--present);border-color:#31a24c}.seat.absent{background:var(--absent);border-color:#d92d20}.seat.late{background:var(--late);border-color:#eaaa08}.seat.leave{background:var(--leave);border-color:#1570ef}
+  .seat .no{display:none}.seat .class{font-size:15px;font-weight:700;color:#444}.seat .name{font-size:22px;font-weight:900;margin-top:4px}.seat .status{font-size:14px;margin-top:6px;color:#333}
+  .note{font-size:14px;color:#666;text-align:center;margin-top:12px;line-height:1.7}.bottom-info{margin-top:18px}.editBox{margin-top:16px;background:white;border:1px solid var(--line);border-radius:16px;padding:14px}.editBox textarea{width:100%;height:170px;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:15px;box-sizing:border-box}.hidden{display:none}
+  @media(max-width:760px){.grid{grid-template-columns:repeat(3,1fr)}.seat{min-height:92px}.seat .name{font-size:19px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="grid" class="grid"></div>
+  <div class="bottom-info">
+    <h1>互動式點名座位表</h1>
+    <div class="teacher">講台</div>
+    <div class="toolbar">
+      <input id="className" value="請輸入" aria-label="名稱">
+      <button onclick="save()">儲存</button>
+      <button class="secondary" onclick="toggleEdit()">編輯名單</button>
+      <button class="excel" onclick="exportExcel()">匯出點名紀錄（Excel）</button>
+      <button class="danger" onclick="resetAll()">一鍵重置</button>
+    </div>
+    <div class="stats" id="stats"></div>
+    <div class="legend">
+      <span><i class="dot" style="background:#fff"></i>未點</span>
+      <span><i class="dot" style="background:#b7f0c0"></i>已到</span>
+      <span><i class="dot" style="background:#ffb6b6"></i>缺席</span>
+      <span><i class="dot" style="background:#ffe08a"></i>遲到</span>
+      <span><i class="dot" style="background:#b9dcff"></i>請假</span>
+    </div>
+  </div>
+  <div class="note">操作：點座位可依序切換「未點 → 已到 → 缺席 → 遲到 → 請假」。資料會自動儲存在此瀏覽器中。</div>
+  <div id="editBox" class="editBox hidden">
+    <b>編輯學生姓名</b><br>
+    <span class="note">一行一位，共 36 位。也可先用座號代替，之後再改姓名。</span>
+    <textarea id="namesText"></textarea><br><br>
+    <button onclick="saveNames()">儲存名單</button>
+  </div>
+</div>
+<script>
+const KEY='attendance_seating_36_v1';
+const labels={blank:'未點',present:'已到',absent:'缺席',late:'遲到',leave:'請假'};
+const order=['blank','present','absent','late','leave'];
+let data=load();
+function defaultData(){
+const positions=[];
+for(let row=5;row>=0;row--){
+  for(let col=0;col<6;col++){
+    positions.push({no:row*6+col+1});
+  }
+}
+return {
+ className:'請輸入',
+ students:positions.map((_,i)=>({no:positions[i].no,name:`學生${i+1}`,status:'blank'}))
+};
+}
+function load(){try{return JSON.parse(localStorage.getItem(KEY))||defaultData()}catch(e){return defaultData()}}
+function persist(){localStorage.setItem(KEY,JSON.stringify(data));render()}
+function render(){document.getElementById('className').value=data.className;const grid=document.getElementById('grid');grid.innerHTML='';data.students.forEach((s,i)=>{const div=document.createElement('div');div.className='seat '+(s.status==='blank'?'':s.status);div.onclick=()=>changeStatus(i);div.innerHTML=`<div class="class">${escapeHtml(data.className)}</div><div class="name">${escapeHtml(s.name)}</div><div class="status">${labels[s.status]}</div>`;grid.appendChild(div)});renderStats();document.getElementById('namesText').value=data.students.map(s=>s.name).join('\n')}
+function renderStats(){const c={blank:0,present:0,absent:0,late:0,leave:0};data.students.forEach(s=>c[s.status]++);document.getElementById('stats').innerHTML=`<span class="pill">總人數：36</span><span class="pill">已到：${c.present}</span><span class="pill">缺席：${c.absent}</span><span class="pill">遲到：${c.late}</span><span class="pill">請假：${c.leave}</span><span class="pill">未點：${c.blank}</span>`}
+function changeStatus(i){const now=data.students[i].status;data.students[i].status=order[(order.indexOf(now)+1)%order.length];persist()}
+function resetAll(){if(confirm('確定要將所有座位狀態重置為「未點」嗎？')){data.students.forEach(s=>s.status='blank');persist()}}
+function save(){data.className=document.getElementById('className').value.trim()||'未命名';persist()}
+function toggleEdit(){document.getElementById('editBox').classList.toggle('hidden')}
+function saveNames(){const names=document.getElementById('namesText').value.split('\n').map(x=>x.trim()).filter(Boolean);for(let i=0;i<36;i++){data.students[i].name=names[i]||`學生${i+1}`;}persist();alert('名單已儲存')}
+function exportExcel(){
+  const now=new Date(); const pad=n=>String(n).padStart(2,'0');
+  const time=`${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  let html=`<html><head><meta charset="utf-8"></head><body><table border="1"><tr><th colspan="5">點名紀錄</th></tr><tr><td></td><td colspan="4">${escapeHtml(data.className)}</td></tr><tr><td>匯出時間</td><td colspan="4">${time}</td></tr><tr><th>座號</th><th></th><th>姓名</th><th>狀態</th><th>備註</th></tr>`;
+  data.students.forEach(s=>{html+=`<tr><td>${s.no}</td><td>${escapeHtml(data.className)}</td><td>${escapeHtml(s.name)}</td><td>${labels[s.status]}</td><td></td></tr>`});
+  html+='</table></body></html>';
+  const blob=new Blob(['\ufeff'+html],{type:'application/vnd.ms-excel'}); const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download=`${data.className}_點名紀錄_${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}.xls`; a.click(); URL.revokeObjectURL(a.href);
+}
+function escapeHtml(str){return String(str).replace(/[&<>'"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]))}
+render();
+</script>
+</body>
+</html>
